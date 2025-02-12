@@ -371,11 +371,15 @@ async def extract_entities(
                 statistic_data["llm_cache"] += 1
                 return cached_return
             statistic_data["llm_call"] += 1
+            # TODO: Hack!
+            # If input_text + history_messages > 4096 tokens, truncate
             if history_messages:
+                print('len: ', len(input_text)+len(history_messages))
                 res: str = await use_llm_func(
                     input_text, history_messages=history_messages
                 )
             else:
+                print('len: ', len(input_text))
                 res: str = await use_llm_func(input_text)
             await save_to_cache(
                 llm_response_cache,
@@ -394,7 +398,7 @@ async def extract_entities(
             return await use_llm_func(input_text)
 
     async def _process_single_content(chunk_key_dp: tuple[str, TextChunkSchema]):
-        """ "Prpocess a single chunk
+        """ "Process a single chunk
         Args:
             chunk_key_dp (tuple[str, TextChunkSchema]):
                 ("chunck-xxxxxx", {"tokens": int, "content": str, "full_doc_id": str, "chunk_order_index": int})
@@ -1027,6 +1031,10 @@ async def _build_query_context(
             [hl_relations_context, ll_relations_context],
             [hl_text_units_context, ll_text_units_context],
         )
+    print('ll_keywords:', ll_keywords)
+    print('hl_keywords:', hl_keywords)
+    print('entities_context:', entities_context)
+    print('relations_context:', relations_context)
     # not necessary to use LLM to generate a response
     if not entities_context.strip() and not relations_context.strip():
         return None
@@ -1054,9 +1062,13 @@ async def _get_node_data(
     text_chunks_db: BaseKVStorage,
     query_param: QueryParam,
 ):
+    print("_get_node_data")
+    print("query:", query)
+    print("top_k:", query_param.top_k)
     # get similar entities
     results = await entities_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
+        print("No results for similar entities")
         return "", "", ""
     # get entity information
     node_datas, node_degrees = await asyncio.gather(
@@ -1101,6 +1113,7 @@ async def _get_node_data(
                 n["rank"],
             ]
         )
+    print("entities_section_list:", entities_section_lit)
     entities_context = list_of_list_to_csv(entites_section_list)
 
     relations_section_list = [
@@ -1132,6 +1145,7 @@ async def _get_node_data(
                 created_at,
             ]
         )
+    print("relations_section_list:", relations_section_list)
     relations_context = list_of_list_to_csv(relations_section_list)
 
     text_units_section_list = [["id", "content"]]
@@ -1270,9 +1284,13 @@ async def _get_edge_data(
     text_chunks_db: BaseKVStorage,
     query_param: QueryParam,
 ):
+    print("_get_edge_data")
+    print("keywords:", keywords)
+    print("top_k:", query_param.top_k)
     results = await relationships_vdb.query(keywords, top_k=query_param.top_k)
 
     if not len(results):
+        print("No results for similar relations")
         return "", "", ""
 
     edge_datas, edge_degree = await asyncio.gather(
@@ -1351,6 +1369,7 @@ async def _get_edge_data(
                 created_at,
             ]
         )
+    print("relations_section_list: ", relations_section_list)
     relations_context = list_of_list_to_csv(relations_section_list)
 
     entites_section_list = [["id", "entity", "type", "description", "rank"]]
@@ -1364,6 +1383,7 @@ async def _get_edge_data(
                 n["rank"],
             ]
         )
+    print("entities_section_list: ", entites_section_list)
     entities_context = list_of_list_to_csv(entites_section_list)
 
     text_units_section_list = [["id", "content"]]
