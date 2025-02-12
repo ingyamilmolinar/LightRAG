@@ -53,8 +53,8 @@ statistic_data = {"llm_call": 0, "llm_cache": 0, "embed_call": 0}
 
 logger = logging.getLogger("lightrag")
 
-# Set httpx logging level to WARNING
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# Set httpx logging level to DEBUG
+logging.getLogger("httpx").setLevel(logging.DEBUG)
 
 
 def set_logger(log_file: str):

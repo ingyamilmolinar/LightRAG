@@ -80,6 +80,7 @@ STORAGE_IMPLEMENTATIONS = {
             "QdrantVectorDBStorage",
             "OracleVectorDBStorage",
             "MongoVectorDBStorage",
+            "SingleStoreVectorDBStorage",
         ],
         "required_methods": ["query", "upsert"],
     },
@@ -145,6 +146,7 @@ STORAGE_ENV_REQUIREMENTS: dict[str, list[str]] = {
         "ORACLE_CONFIG_DIR",
     ],
     "MongoVectorDBStorage": [],
+    "SingleStoreVectorDBStorage": [],
     # Document Status Storage Implementations
     "JsonDocStatusStorage": [],
     "PGDocStatusStorage": ["POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DATABASE"],
@@ -179,6 +181,7 @@ STORAGES = {
     "PGDocStatusStorage": ".kg.postgres_impl",
     "FaissVectorDBStorage": ".kg.faiss_impl",
     "QdrantVectorDBStorage": ".kg.qdrant_impl",
+    "SingleStoreVectorDBStorage": ".kg.singlestore_impl",
 }
 
 
