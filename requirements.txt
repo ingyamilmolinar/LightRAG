@@ -3,6 +3,7 @@ configparser
 
 # database packages
 networkx
+aiomysql
 
 # Basic modules
 numpy

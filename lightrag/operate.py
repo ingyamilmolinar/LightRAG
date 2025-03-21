@@ -216,6 +216,7 @@ async def _merge_nodes_then_upsert(
         description=description,
         source_id=source_id,
     )
+    print('Upserting entity:', entity_name, entity_type)
     await knowledge_graph_inst.upsert_node(
         entity_name,
         node_data=node_data,
@@ -290,6 +291,7 @@ async def _merge_edges_then_upsert(
 
     for need_insert_id in [src_id, tgt_id]:
         if not (await knowledge_graph_inst.has_node(need_insert_id)):
+            print('Upserting entity:', need_insert_id, "UNKNOWN")
             await knowledge_graph_inst.upsert_node(
                 need_insert_id,
                 node_data={
@@ -301,6 +303,7 @@ async def _merge_edges_then_upsert(
     description = await _handle_entity_relation_summary(
         f"({src_id}, {tgt_id})", description, global_config
     )
+    print('Upserting relationship:', src_id, tgt_id)
     await knowledge_graph_inst.upsert_edge(
         src_id,
         tgt_id,
@@ -403,11 +406,15 @@ async def extract_entities(
                 statistic_data["llm_cache"] += 1
                 return cached_return
             statistic_data["llm_call"] += 1
+            # TODO: Hack!
+            # If input_text + history_messages > 4096 tokens, truncate
             if history_messages:
+                print('len: ', len(input_text)+len(history_messages))
                 res: str = await use_llm_func(
                     input_text, history_messages=history_messages
                 )
             else:
+                print('len: ', len(input_text))
                 res: str = await use_llm_func(input_text)
             await save_to_cache(
                 llm_response_cache,
@@ -426,7 +433,7 @@ async def extract_entities(
             return await use_llm_func(input_text)
 
     async def _process_single_content(chunk_key_dp: tuple[str, TextChunkSchema]):
-        """ "Prpocess a single chunk
+        """ "Process a single chunk
         Args:
             chunk_key_dp (tuple[str, TextChunkSchema]):
                 ("chunck-xxxxxx", {"tokens": int, "content": str, "full_doc_id": str, "chunk_order_index": int})
@@ -441,6 +448,7 @@ async def extract_entities(
         ).format(**context_base, input_text=content)
 
         final_result = await _user_llm_func_with_cache(hint_prompt)
+        print('Final result:', final_result)
         history = pack_user_ass_to_openai_messages(hint_prompt, final_result)
         for now_glean_index in range(entity_extract_max_gleaning):
             glean_result = await _user_llm_func_with_cache(
@@ -464,9 +472,11 @@ async def extract_entities(
             [context_base["record_delimiter"], context_base["completion_delimiter"]],
         )
 
+        print('Records:', len(records))
         maybe_nodes = defaultdict(list)
         maybe_edges = defaultdict(list)
         for record in records:
+            print('Record:', record)
             record = re.search(r"\((.*)\)", record)
             if record is None:
                 continue
@@ -491,7 +501,9 @@ async def extract_entities(
         already_processed += 1
         already_entities += len(maybe_nodes)
         already_relations += len(maybe_edges)
-
+        print(
+            f"Processed {already_processed} chunks, {already_entities} entities(duplicated), {already_relations} relations(duplicated)\r",
+        )
         logger.debug(
             f"Processed {already_processed} chunks, {already_entities} entities(duplicated), {already_relations} relations(duplicated)\r",
         )
@@ -590,6 +602,8 @@ async def kg_query(
 
     logger.debug(f"High-level keywords: {hl_keywords}")
     logger.debug(f"Low-level  keywords: {ll_keywords}")
+    print(f"High-level keywords: {hl_keywords}")
+    print(f"Low-level keywords: {ll_keywords}")
 
     # Handle empty keywords
     if hl_keywords == [] and ll_keywords == []:
@@ -647,6 +661,10 @@ async def kg_query(
     len_of_prompts = len(encode_string_by_tiktoken(query + sys_prompt))
     logger.debug(f"[kg_query]Prompt Tokens: {len_of_prompts}")
 
+    print('Prompt Tokens: ', len_of_prompts)
+    print('Query: ', query)
+    print('Sys Prompt: ', sys_prompt)
+    print('Stream: ', query_param.stream)
     response = await use_model_func(
         query,
         system_prompt=sys_prompt,
@@ -1039,6 +1057,10 @@ async def _build_query_context(
             [hl_relations_context, ll_relations_context],
             [hl_text_units_context, ll_text_units_context],
         )
+    print('ll_keywords:', ll_keywords)
+    print('hl_keywords:', hl_keywords)
+    print('entities_context:', entities_context)
+    print('relations_context:', relations_context)
     # not necessary to use LLM to generate a response
     if not entities_context.strip() and not relations_context.strip():
         return None
@@ -1067,12 +1089,16 @@ async def _get_node_data(
     text_chunks_db: BaseKVStorage,
     query_param: QueryParam,
 ):
+    print("_get_node_data")
+    print("query:", query)
+    print("top_k:", query_param.top_k)
     # get similar entities
     logger.info(
         f"Query nodes: {query}, top_k: {query_param.top_k}, cosine: {entities_vdb.cosine_better_than_threshold}"
     )
     results = await entities_vdb.query(query, top_k=query_param.top_k)
     if not len(results):
+        print("No results for similar entities")
         return "", "", ""
     # get entity information
     node_datas, node_degrees = await asyncio.gather(
@@ -1128,6 +1154,7 @@ async def _get_node_data(
                 n["rank"],
             ]
         )
+    print("entities_section_list:", entites_section_list)
     entities_context = list_of_list_to_csv(entites_section_list)
 
     relations_section_list = [
@@ -1159,6 +1186,7 @@ async def _get_node_data(
                 created_at,
             ]
         )
+    print("relations_section_list:", relations_section_list)
     relations_context = list_of_list_to_csv(relations_section_list)
 
     text_units_section_list = [["id", "content"]]
@@ -1306,14 +1334,19 @@ async def _get_edge_data(
     text_chunks_db: BaseKVStorage,
     query_param: QueryParam,
 ):
+    print(
+        f"Query edges: {keywords}, top_k: {query_param.top_k}, cosine: {relationships_vdb.cosine_better_than_threshold}"
+    )
     logger.info(
         f"Query edges: {keywords}, top_k: {query_param.top_k}, cosine: {relationships_vdb.cosine_better_than_threshold}"
     )
     results = await relationships_vdb.query(keywords, top_k=query_param.top_k)
 
     if not len(results):
+        print("No results for similar relations")
         return "", "", ""
 
+    print("results:", results)
     edge_datas, edge_degree = await asyncio.gather(
         asyncio.gather(
             *[knowledge_graph_inst.get_edge(r["src_id"], r["tgt_id"]) for r in results]
@@ -1394,6 +1427,7 @@ async def _get_edge_data(
                 created_at,
             ]
         )
+    print("relations_section_list: ", relations_section_list)
     relations_context = list_of_list_to_csv(relations_section_list)
 
     entites_section_list = [["id", "entity", "type", "description", "rank"]]
@@ -1407,6 +1441,7 @@ async def _get_edge_data(
                 n["rank"],
             ]
         )
+    print("entities_section_list: ", entites_section_list)
     entities_context = list_of_list_to_csv(entites_section_list)
 
     text_units_section_list = [["id", "content"]]
